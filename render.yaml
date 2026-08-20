@@ -1,0 +1,40 @@
+# Optional Blueprint — or configure manually in Render Dashboard.
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: netflix-checker-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # More threads for concurrent user/admin HTTP while batch runs in a child process.
+    # Keep --workers 1 (in-process admin tokens + single supervisor).
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 16 --timeout 300
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_SECRET
+        generateValue: true
+      - key: CHECK_WORKERS
+        value: "2"
+      - key: CHECK_WORKERS_MAX
+        value: "2"
+      - key: CHECK_YIELD_MS
+        value: "150"
+      - key: CHECK_USE_PROCESS
+        value: "1"
+      - key: CHECK_TIMEOUT
+        value: "10"
+      - key: USER_LIVE_CACHE_TTL
+        value: "20"
+      - key: DB_POOL_API
+        value: "6"
+      - key: DB_POOL_WORKER
+        value: "2"
+      - key: CORS_ORIGINS
+        sync: false
