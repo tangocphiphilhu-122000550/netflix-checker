@@ -220,6 +220,15 @@ textarea:focus, select:focus, input:focus {
 }
 .file-btn input { display: none; }
 .file-btn-lg { padding: 12px 16px; font-size: 14px; }
+.file-btn:hover { border-color: var(--accent); background: rgba(229,9,20,.08); color: var(--accent); transition: all .15s; }
+
+/* Drag-and-drop highlight */
+.card.drag-over {
+  border-color: var(--accent) !important;
+  background: rgba(229,9,20,.06) !important;
+  box-shadow: 0 0 0 2px rgba(229,9,20,.25), var(--shadow) !important;
+  transition: all .15s;
+}
 
 .live-list { display: grid; gap: 12px; margin-top: 14px; }
 .live-card {

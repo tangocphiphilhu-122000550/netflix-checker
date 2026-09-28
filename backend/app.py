@@ -13,8 +13,10 @@ Frontend is separate (../frontend-next Next.js) — set NEXT_PUBLIC_API_BASE to 
 from __future__ import annotations
 
 import hmac
+import logging
 import os
 import secrets
+import threading
 import time
 from functools import wraps
 
@@ -936,6 +938,41 @@ def admin_init_db():
         return jsonify({"ok": True})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+_keepalive_logger = logging.getLogger("keepalive")
+
+
+def _db_keepalive_loop(interval_sec: int = 6 * 3600) -> None:
+    """Background thread: ping DB every interval_sec to prevent Supabase free-tier pause."""
+    # Wait a bit after startup before first ping
+    time.sleep(60)
+    while True:
+        if is_db_configured():
+            try:
+                result = db_health()
+                _keepalive_logger.info("[keepalive] DB ping OK: %s", result)
+            except Exception as exc:
+                _keepalive_logger.warning("[keepalive] DB ping failed: %s", exc)
+        time.sleep(interval_sec)
+
+
+def _start_keepalive() -> None:
+    """Start the DB keep-alive daemon thread (safe to call multiple times)."""
+    interval = int(os.environ.get("KEEPALIVE_INTERVAL_SEC") or 6 * 3600)
+    t = threading.Thread(
+        target=_db_keepalive_loop,
+        args=(interval,),
+        daemon=True,
+        name="db-keepalive",
+    )
+    t.start()
+    _keepalive_logger.info("[keepalive] DB keep-alive thread started (interval=%ds)", interval)
+
+
+# Start keep-alive when running under gunicorn (module imported) or directly
+if os.environ.get("KEEPALIVE_DISABLE") not in {"1", "true", "yes"}:
+    _start_keepalive()
 
 
 if __name__ == "__main__":

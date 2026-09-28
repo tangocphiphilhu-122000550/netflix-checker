@@ -316,6 +316,62 @@ export default function AdminPage() {
     })();
   }
 
+  /** Recursively collect all .txt files from a FileSystemEntry (drag-drop). */
+  async function collectTxtFromEntry(entry: FileSystemEntry): Promise<File[]> {
+    if (entry.isFile) {
+      const fileEntry = entry as FileSystemFileEntry;
+      if (!entry.name.toLowerCase().endsWith(".txt")) return [];
+      return new Promise<File[]>((resolve) => {
+        fileEntry.file(
+          (f) => resolve([f]),
+          () => resolve([])
+        );
+      });
+    }
+    if (entry.isDirectory) {
+      const dirEntry = entry as FileSystemDirectoryEntry;
+      const reader = dirEntry.createReader();
+      const allEntries: FileSystemEntry[] = [];
+      await new Promise<void>((resolve) => {
+        function readBatch() {
+          reader.readEntries((batch) => {
+            if (!batch.length) { resolve(); return; }
+            allEntries.push(...batch);
+            readBatch();
+          }, () => resolve());
+        }
+        readBatch();
+      });
+      const nested = await Promise.all(allEntries.map((e) => collectTxtFromEntry(e)));
+      return nested.flat();
+    }
+    return [];
+  }
+
+  async function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.currentTarget.classList.remove("drag-over");
+    const items = Array.from(e.dataTransfer.items);
+    const collected: File[] = [];
+    for (const item of items) {
+      if (item.kind !== "file") continue;
+      const entry = item.webkitGetAsEntry?.();
+      if (entry) {
+        const found = await collectTxtFromEntry(entry);
+        collected.push(...found);
+      } else {
+        const f = item.getAsFile();
+        if (f && f.name.toLowerCase().endsWith(".txt")) collected.push(f);
+      }
+    }
+    if (!collected.length) return;
+    setFiles((prev) => {
+      const map = new Map<string, File>();
+      [...prev, ...collected].forEach((f) => map.set(`${f.name}::${f.size}`, f));
+      return Array.from(map.values());
+    });
+  }
+
   /** 1) Tạo phiếu + upload chunk nhiều API — không check. */
   async function uploadToDb() {
     if (!files.length || !token) {
@@ -1028,13 +1084,20 @@ export default function AdminPage() {
         )}
       </section>
 
-      <section className="card" style={{ marginTop: 14 }}>
+      <section
+        className="card"
+        style={{ marginTop: 14 }}
+        onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("drag-over"); }}
+        onDragLeave={(e) => { e.currentTarget.classList.remove("drag-over"); }}
+        onDrop={(e) => void handleDrop(e)}
+      >
         <div className="db-card-head">
           <strong>1 · Upload cookie lên DB</strong>
         </div>
         <p className="hint" style={{ marginTop: 0 }}>
           Chọn bao nhiêu file cũng được (vd 2000). FE chia lô {UPLOAD_CHUNK} file/request → 1
           phiếu. <strong>Chưa check</strong> — chỉ lưu DB (status ready).
+          {" "}<strong>Hỗ trợ kéo thả / chọn cả folder</strong> — tự tìm tất cả file <code>.txt</code> bên trong.
         </p>
         <label className="field" style={{ marginBottom: 10 }}>
           <span>Tên phiếu</span>
@@ -1046,7 +1109,7 @@ export default function AdminPage() {
             disabled={uploading}
           />
         </label>
-        <div className="row options">
+        <div className="row options" style={{ flexWrap: "wrap", gap: 8 }}>
           <label className="file-btn file-btn-lg">
             <input
               type="file"
@@ -1060,9 +1123,32 @@ export default function AdminPage() {
                 setFiles(Array.from(map.values()));
               }}
             />
-            Chọn list cookie
+            Chọn file .txt
           </label>
-          <span className="muted">{files.length} file</span>
+          <label className="file-btn file-btn-lg" title="Chọn folder — tự tìm tất cả .txt bên trong (kể cả sub-folder)">
+            <input
+              type="file"
+              // @ts-expect-error — webkitdirectory is non-standard but supported in all modern browsers
+              webkitdirectory=""
+              multiple
+              disabled={uploading}
+              onChange={async (e) => {
+                const list = Array.from(e.target.files || []).filter((f) =>
+                  f.name.toLowerCase().endsWith(".txt")
+                );
+                if (!list.length) return;
+                setFiles((prev) => {
+                  const map = new Map<string, File>();
+                  [...prev, ...list].forEach((f) => map.set(`${f.name}::${f.size}`, f));
+                  return Array.from(map.values());
+                });
+              }}
+            />
+            📁 Chọn folder
+          </label>
+          <span className="muted" style={{ alignSelf: "center" }}>
+            {files.length > 0 ? `${files.length} file .txt` : "Hoặc kéo thả folder / file vào đây"}
+          </span>
         </div>
         {files.length > 0 && (
           <div className="bulk-file-list">
