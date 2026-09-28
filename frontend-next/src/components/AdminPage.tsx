@@ -348,7 +348,7 @@ export default function AdminPage() {
     return [];
   }
 
-  async function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+  async function handleDrop(e: React.DragEvent<HTMLElement>) {
     e.preventDefault();
     e.currentTarget.classList.remove("drag-over");
     const items = Array.from(e.dataTransfer.items);
